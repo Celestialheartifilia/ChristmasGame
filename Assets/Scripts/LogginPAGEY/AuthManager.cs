@@ -1,5 +1,4 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
+﻿using UnityEngine.UI;
 using Firebase;
 using Firebase.Auth;
 using Firebase.Database;
@@ -9,7 +8,22 @@ using UnityEngine.SceneManagement;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
+using UnityEngine;
 
+[System.Serializable]
+public class UserCredentials
+{
+    public string username;
+    public string email;
+    public string password;
+
+    public UserCredentials(string username, string email, string password)
+    {
+        this.username = username;
+        this.email = email;
+        this.password = password;
+    }
+}
 
 public class AuthManager : MonoBehaviour
 {
@@ -44,7 +58,6 @@ public class AuthManager : MonoBehaviour
         {
             if (task.Result == DependencyStatus.Available)
             {
-
                 auth = FirebaseAuth.DefaultInstance;
                 dbRef = FirebaseDatabase.DefaultInstance.RootReference;
 
@@ -78,28 +91,27 @@ public class AuthManager : MonoBehaviour
         messageText.text = "";
     }
 
-    // ──────────────────────────────────────────────────────
-    // ✅ SIGN UP
-    // ──────────────────────────────────────────────────────
     public void SignUp()
     {
-        string email = emailInput.text.Trim();
-        string password = passwordInput.text;
-        string username = usernameInput.text.Trim();
+        UserCredentials creds = new UserCredentials(
+            usernameInput.text.Trim(),
+            emailInput.text.Trim(),
+            passwordInput.text
+        );
 
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(username))
+        if (string.IsNullOrEmpty(creds.email) || string.IsNullOrEmpty(creds.password) || string.IsNullOrEmpty(creds.username))
         {
             ShowMessage("Please fill in all fields.");
             return;
         }
 
-        if (password.Length < 6)
+        if (creds.password.Length < 6)
         {
             ShowMessage("Password must be at least 6 characters long.");
             return;
         }
 
-        auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWith(task =>
+        auth.CreateUserWithEmailAndPasswordAsync(creds.email, creds.password).ContinueWith(task =>
         {
             if (task.IsCanceled || task.IsFaulted)
             {
@@ -111,41 +123,33 @@ public class AuthManager : MonoBehaviour
             FirebaseUser newUser = task.Result.User;
             currentUserId = newUser.UserId;
 
-            Debug.Log($"📤 Saving user {currentUserId} with username: {username}, email: {email}");
-            SaveUserToDatabase(currentUserId, username, email);
+            Debug.Log($"📤 Saving user {currentUserId} with username: {creds.username}, email: {creds.email}");
 
-        });
-    }
-
-    private void SaveUserToDatabase(string userId, string username, string email)
-    {
-        var userData = new Dictionary<string, object>
-        {
-            { "username", username },
-            { "email", email }
-        };
-
-        dbRef.Child("users").Child(userId).SetValueAsync(userData).ContinueWith(task =>
-        {
-            UnityMainThreadDispatcher.Instance().Enqueue(() =>
+            var userData = new Dictionary<string, object>
             {
-                if (task.IsFaulted || task.IsCanceled)
+                { "username", creds.username },
+                { "email", creds.email }
+            };
+
+            dbRef.Child("users").Child(currentUserId).SetValueAsync(userData).ContinueWith(saveTask =>
+            {
+                UnityMainThreadDispatcher.Instance().Enqueue(() =>
                 {
-                    ShowMessage("Failed to save user data.");
-                    Debug.LogError("❌ SaveUserToDatabase failed: " + task.Exception);
-                }
-                else
-                {
-                    Debug.Log("✅ SaveUserToDatabase succeeded.");
-                    ShowMessage("✅ Registration successful!");
-                }
+                    if (saveTask.IsFaulted || saveTask.IsCanceled)
+                    {
+                        ShowMessage("Failed to save user data.");
+                        Debug.LogError("❌ SaveUserToDatabase failed: " + saveTask.Exception);
+                    }
+                    else
+                    {
+                        Debug.Log("✅ SaveUserToDatabase succeeded.");
+                        ShowMessage("✅ Registration successful!");
+                    }
+                });
             });
         });
     }
 
-    // ──────────────────────────────────────────────────────
-    // ✅ LOGIN
-    // ──────────────────────────────────────────────────────
     public void Login()
     {
         string email = emailInput.text.Trim();
@@ -170,7 +174,6 @@ public class AuthManager : MonoBehaviour
 
                 FirebaseUser user = task.Result.User;
                 currentUserId = user.UserId;
-
                 LoadUsername(currentUserId);
             });
         });
@@ -195,9 +198,6 @@ public class AuthManager : MonoBehaviour
         });
     }
 
-    // ──────────────────────────────────────────────────────
-    // 🔁 Reset Password
-    // ──────────────────────────────────────────────────────
     public void OnForgotPasswordButtonPressed() => ForgotPassword(emailInput.text);
 
     public void ForgotPassword(string email)
@@ -243,34 +243,6 @@ public class AuthManager : MonoBehaviour
         return exception.Flatten().InnerExceptions[0].Message;
     }
 
-    /*
-    // ──────────────────────────────────────────────────────
-    // 🏆 Save High Score — TEMPORARILY DISABLED
-    // ──────────────────────────────────────────────────────
-    public void SaveHighScore(int score)
-    {
-        if (string.IsNullOrEmpty(currentUserId)) return;
-
-        var scoreRef = dbRef.Child("users").Child(currentUserId).Child("highscore");
-
-        scoreRef.GetValueAsync().ContinueWith(task =>
-        {
-            int currentHigh = 0;
-            if (task.Result.Exists && int.TryParse(task.Result.Value.ToString(), out currentHigh))
-            {
-                if (score > currentHigh) scoreRef.SetValueAsync(score);
-            }
-            else
-            {
-                scoreRef.SetValueAsync(score);
-            }
-        });
-    }
-    */
-
-    // ──────────────────────────────────────────────────────
-    // 🚪 Sign Out
-    // ──────────────────────────────────────────────────────
     public void SignOut()
     {
         auth.SignOut();
@@ -284,4 +256,3 @@ public class AuthManager : MonoBehaviour
         SceneManager.LoadScene("HomePage");
     }
 }
-
