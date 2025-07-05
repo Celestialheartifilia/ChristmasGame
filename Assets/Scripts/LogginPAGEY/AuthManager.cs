@@ -10,6 +10,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 
+
 public class AuthManager : MonoBehaviour
 {
     public static AuthManager Instance;
@@ -20,7 +21,6 @@ public class AuthManager : MonoBehaviour
     public TMP_InputField emailInput;
     public TMP_InputField passwordInput;
 
-
     [Header("UI Elements")]
     public TMP_Text messageText;
     public GameObject loginCanvas;
@@ -28,65 +28,64 @@ public class AuthManager : MonoBehaviour
     private FirebaseAuth auth;
     private DatabaseReference dbRef;
 
+    void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else Destroy(gameObject);
+    }
+
     void Start()
     {
         FirebaseApp.CheckAndFixDependenciesAsync().ContinueWith(task =>
         {
             if (task.Result == DependencyStatus.Available)
             {
-                // ✅ Set the database URL BEFORE using FirebaseDatabase
-                FirebaseApp.DefaultInstance.Options.DatabaseUrl =
-                    new System.Uri("https://atchthepresentgame-default-rtdb.asia-southeast1.firebasedatabase.app/");
 
                 auth = FirebaseAuth.DefaultInstance;
                 dbRef = FirebaseDatabase.DefaultInstance.RootReference;
 
-                Debug.Log("✅ Firebase is ready.");
-
+                Debug.Log("✅ Firebase initialized.");
             }
             else
             {
                 UnityMainThreadDispatcher.Instance().Enqueue(() =>
-                {
-                    ShowMessage("Firebase not available.");
-                });
+                    ShowMessage("Firebase not available."));
                 Debug.LogError("❌ Firebase dependency error: " + task.Result.ToString());
             }
         });
     }
 
-
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.M)) ShowMessage("✅ Test message visible");
+    }
 
     private void ShowMessage(string message)
     {
-        Debug.Log("ShowMessage called with: " + message);
+        Debug.Log("Message: " + message);
         messageText.text = message;
-        StopAllCoroutines();  // stop previous clear message coroutines
+        StopAllCoroutines();
         StartCoroutine(ClearMessageAfterDelay(3f));
     }
+
     private IEnumerator ClearMessageAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-        messageText.text = "";  // clears the message text
+        messageText.text = "";
     }
 
-    void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.M))
-        {
-            ShowMessage("✅ Test message visible");
-        }
-    }
-
-    //register error handling for Register
-
+    // ──────────────────────────────────────────────────────
+    // ✅ SIGN UP
+    // ──────────────────────────────────────────────────────
     public void SignUp()
     {
-        Debug.Log("📩 SignUp called.");
-
-        string email = emailInput.text;
+        string email = emailInput.text.Trim();
         string password = passwordInput.text;
-        string username = usernameInput.text;
+        string username = usernameInput.text.Trim();
 
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(username))
         {
@@ -104,74 +103,52 @@ public class AuthManager : MonoBehaviour
         {
             if (task.IsCanceled || task.IsFaulted)
             {
-                string errorMsg = "Signup failed.";
-
-                if (task.Exception != null)
-                {
-                    var firebaseEx = task.Exception.Flatten().InnerExceptions[0] as Firebase.FirebaseException;
-                    if (firebaseEx != null)
-                    {
-                        var errorCode = (Firebase.Auth.AuthError)firebaseEx.ErrorCode;
-                        switch (errorCode)
-                        {
-                            case Firebase.Auth.AuthError.EmailAlreadyInUse:
-                                errorMsg = "This email is already registered.";
-                                break;
-                            case Firebase.Auth.AuthError.InvalidEmail:
-                                errorMsg = "Invalid email format.";
-                                break;
-                            case Firebase.Auth.AuthError.WeakPassword:
-                                errorMsg = "Password is too weak.";
-                                break;
-                            default:
-                                errorMsg = firebaseEx.Message;
-                                break;
-                        }
-                    }
-                }
-
-                // Back to main thread
-                Task.Factory.StartNew(() => ShowMessage(errorMsg),
-                    System.Threading.CancellationToken.None,
-                    TaskCreationOptions.None,
-                    TaskScheduler.FromCurrentSynchronizationContext());
-
+                string errorMsg = ParseFirebaseError(task.Exception);
+                UnityMainThreadDispatcher.Instance().Enqueue(() => ShowMessage(errorMsg));
                 return;
             }
 
             FirebaseUser newUser = task.Result.User;
             currentUserId = newUser.UserId;
 
-            Debug.Log("✅ User created. Saving to database...");
-            SaveUsernameToDatabase(newUser.UserId, username);
+            Debug.Log($"📤 Saving user {currentUserId} with username: {username}, email: {email}");
+            SaveUserToDatabase(currentUserId, username, email);
+
         });
     }
 
-
-    private void SaveUsernameToDatabase(string userId, string username)
+    private void SaveUserToDatabase(string userId, string username, string email)
     {
         var userData = new Dictionary<string, object>
-    {
-        { "username", username },
-        { "email", emailInput.text }
-    };
+        {
+            { "username", username },
+            { "email", email }
+        };
 
         dbRef.Child("users").Child(userId).SetValueAsync(userData).ContinueWith(task =>
         {
-            if (task.IsFaulted || task.IsCanceled)
-                Debug.LogError("Failed to save user data: " + task.Exception);
-            else
-                Debug.Log("User data saved successfully.");
+            UnityMainThreadDispatcher.Instance().Enqueue(() =>
+            {
+                if (task.IsFaulted || task.IsCanceled)
+                {
+                    ShowMessage("Failed to save user data.");
+                    Debug.LogError("❌ SaveUserToDatabase failed: " + task.Exception);
+                }
+                else
+                {
+                    Debug.Log("✅ SaveUserToDatabase succeeded.");
+                    ShowMessage("✅ Registration successful!");
+                }
+            });
         });
     }
 
-
-
-    //Login error handler
-
+    // ──────────────────────────────────────────────────────
+    // ✅ LOGIN
+    // ──────────────────────────────────────────────────────
     public void Login()
     {
-        string email = emailInput.text;
+        string email = emailInput.text.Trim();
         string password = passwordInput.text;
 
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
@@ -186,43 +163,15 @@ public class AuthManager : MonoBehaviour
             {
                 if (task.IsCanceled || task.IsFaulted)
                 {
-                    string errorMsg = "Login failed.";
-                    if (task.Exception != null)
-                    {
-                        var firebaseEx = task.Exception.Flatten().InnerExceptions[0] as FirebaseException;
-                        if (firebaseEx != null)
-                        {
-                            var authError = (AuthError)firebaseEx.ErrorCode;
-                            switch (authError)
-                            {
-                                case AuthError.WrongPassword:
-                                    errorMsg = "Incorrect password.";
-                                    break;
-                                case AuthError.UserNotFound:
-                                    errorMsg = "User not found.";
-                                    break;
-                                case AuthError.InvalidEmail:
-                                    errorMsg = "Invalid email address.";
-                                    break;
-                                default:
-                                    errorMsg = firebaseEx.Message;
-                                    break;
-                            }
-                        }
-                        else
-                        {
-                            errorMsg = task.Exception.Flatten().InnerExceptions[0].Message;
-                        }
-                    }
-
+                    string errorMsg = ParseFirebaseError(task.Exception);
                     ShowMessage(errorMsg);
-                    Debug.LogError(task.Exception);
                     return;
                 }
 
                 FirebaseUser user = task.Result.User;
                 currentUserId = user.UserId;
-                LoadUsername(user.UserId);
+
+                LoadUsername(currentUserId);
             });
         });
     }
@@ -235,120 +184,104 @@ public class AuthManager : MonoBehaviour
             {
                 if (task.IsCompleted && task.Result.Exists)
                 {
-                    string username = task.Result.Value.ToString();
+                    Debug.Log("✅ Username: " + task.Result.Value.ToString());
                     SwitchToHomePage();
                 }
                 else
                 {
-                    ShowMessage("Login succeeded, but username not found.");
+                    ShowMessage("Login succeeded, but no username found.");
                 }
             });
         });
     }
 
-    public void OnForgotPasswordButtonPressed()
-    {
-        ForgotPassword(emailInput.text);
-    }
+    // ──────────────────────────────────────────────────────
+    // 🔁 Reset Password
+    // ──────────────────────────────────────────────────────
+    public void OnForgotPasswordButtonPressed() => ForgotPassword(emailInput.text);
 
     public void ForgotPassword(string email)
     {
         if (string.IsNullOrEmpty(email))
         {
-            ShowMessage("Please enter your email to reset password.");
+            ShowMessage("Please enter your email.");
             return;
         }
 
         auth.SendPasswordResetEmailAsync(email).ContinueWith(task =>
         {
-            if (task.IsCanceled || task.IsFaulted)
-            {
-                var errorMsg = task.Exception.Flatten().InnerExceptions[0].Message;
-                Debug.LogError("Reset Error: " + errorMsg);
-                UnityMainThreadDispatcher.Instance().Enqueue(() =>
-                {
-                    ShowMessage("Reset failed: " + errorMsg);
-                });
-                return;
-            }
-
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
-                ShowMessage("✅ Reset email sent! Please check your inbox.");
-                Debug.Log("Password reset email sent to: " + email);
+                if (task.IsCanceled || task.IsFaulted)
+                {
+                    ShowMessage("Reset failed: " + task.Exception.Flatten().InnerExceptions[0].Message);
+                }
+                else
+                {
+                    ShowMessage("✅ Reset email sent.");
+                }
             });
         });
     }
 
+    private string ParseFirebaseError(System.AggregateException exception)
+    {
+        var firebaseEx = exception.Flatten().InnerExceptions[0] as FirebaseException;
+        if (firebaseEx != null)
+        {
+            var errorCode = (AuthError)firebaseEx.ErrorCode;
+            switch (errorCode)
+            {
+                case AuthError.EmailAlreadyInUse: return "Email already registered.";
+                case AuthError.InvalidEmail: return "Invalid email format.";
+                case AuthError.WeakPassword: return "Weak password.";
+                case AuthError.UserNotFound: return "User not found.";
+                case AuthError.WrongPassword: return "Wrong password.";
+                default: return firebaseEx.Message;
+            }
+        }
+        return exception.Flatten().InnerExceptions[0].Message;
+    }
+
+    /*
+    // ──────────────────────────────────────────────────────
+    // 🏆 Save High Score — TEMPORARILY DISABLED
+    // ──────────────────────────────────────────────────────
+    public void SaveHighScore(int score)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        var scoreRef = dbRef.Child("users").Child(currentUserId).Child("highscore");
+
+        scoreRef.GetValueAsync().ContinueWith(task =>
+        {
+            int currentHigh = 0;
+            if (task.Result.Exists && int.TryParse(task.Result.Value.ToString(), out currentHigh))
+            {
+                if (score > currentHigh) scoreRef.SetValueAsync(score);
+            }
+            else
+            {
+                scoreRef.SetValueAsync(score);
+            }
+        });
+    }
+    */
+
+    // ──────────────────────────────────────────────────────
+    // 🚪 Sign Out
+    // ──────────────────────────────────────────────────────
+    public void SignOut()
+    {
+        auth.SignOut();
+        currentUserId = null;
+        SceneManager.LoadScene("LoginSignUpPage");
+        ShowMessage("Signed out successfully.");
+    }
 
     private void SwitchToHomePage()
     {
         SceneManager.LoadScene("HomePage");
     }
-
-    public void SaveHighScore(int score)
-    {
-        if (string.IsNullOrEmpty(currentUserId)) return;
-
-        var userHighscoreRef = FirebaseDatabase.DefaultInstance
-            .RootReference
-            .Child("users")
-            .Child(currentUserId)
-            .Child("highscore");
-
-        userHighscoreRef.GetValueAsync().ContinueWith(task =>
-        {
-            if (task.IsCompleted)
-            {
-                int currentHigh = 0;
-                if (task.Result.Exists && int.TryParse(task.Result.Value.ToString(), out currentHigh))
-                {
-                    if (score > currentHigh)
-                    {
-                        userHighscoreRef.SetValueAsync(score);
-                        Debug.Log("✅ New high score saved: " + score);
-                    }
-                    else
-                    {
-                        Debug.Log("ℹ️ Score not higher than high score. Not updated.");
-                    }
-                }
-                else
-                {
-                    // No high score yet, save it
-                    userHighscoreRef.SetValueAsync(score);
-                    Debug.Log("✅ First high score saved: " + score);
-                }
-            }
-        });
-    }
-
-
-    public void SignOut()
-    {
-        auth.SignOut();
-        currentUserId = null;
-
-        SceneManager.LoadScene("LoginSignUpPage");
-
-        ShowMessage("Signed out successfully!");
-        Debug.Log("✅ User signed out.");
-    }
-
-
-    void Awake()
-    {
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject); // optional if you want to keep it between scenes
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
-    }
-
 }
-
 

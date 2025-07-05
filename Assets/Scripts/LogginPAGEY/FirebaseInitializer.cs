@@ -11,12 +11,9 @@ public class FirebaseInitializer : MonoBehaviour
             {
                 var app = FirebaseApp.DefaultInstance;
 
-                // ✅ Set database URL only once
-                if (app.Options.DatabaseUrl == null || app.Options.DatabaseUrl.ToString() == "")
-                {
-                    app.Options.DatabaseUrl = new System.Uri("https://atchthepresentgame-default-rtdb.asia-southeast1.firebasedatabase.app/");
-                    Debug.Log("✅ Firebase Database URL set.");
-                }
+                // ✅ Always set database URL explicitly
+                app.Options.DatabaseUrl = new System.Uri("https://atchthepresentgame-default-rtdb.asia-southeast1.firebasedatabase.app/");
+                Debug.Log("✅ Firebase Database URL set.");
             }
             else
             {
@@ -25,3 +22,4 @@ public class FirebaseInitializer : MonoBehaviour
         });
     }
 }
+
