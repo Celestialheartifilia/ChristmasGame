@@ -96,7 +96,7 @@ public class AuthManager : MonoBehaviour
         UserCredentials creds = new UserCredentials(
             usernameInput.text.Trim(),
             emailInput.text.Trim(),
-            passwordInput.text
+            passwordInput.text // you can choose not to save this in Firebase
         );
 
         if (string.IsNullOrEmpty(creds.email) || string.IsNullOrEmpty(creds.password) || string.IsNullOrEmpty(creds.username))
@@ -123,15 +123,13 @@ public class AuthManager : MonoBehaviour
             FirebaseUser newUser = task.Result.User;
             currentUserId = newUser.UserId;
 
-            Debug.Log($"📤 Saving user {currentUserId} with username: {creds.username}, email: {creds.email}");
+            Debug.Log($"📤 Saving user {currentUserId} as JSON");
 
-            var userData = new Dictionary<string, object>
-            {
-                { "username", creds.username },
-                { "email", creds.email }
-            };
+            // Serialize to JSON
+            string json = JsonUtility.ToJson(new UserCredentials(creds.username, creds.email, "")); // omit password for safety
 
-            dbRef.Child("users").Child(currentUserId).SetValueAsync(userData).ContinueWith(saveTask =>
+            // Save using raw JSON
+            dbRef.Child("users").Child(currentUserId).SetRawJsonValueAsync(json).ContinueWith(saveTask =>
             {
                 UnityMainThreadDispatcher.Instance().Enqueue(() =>
                 {
@@ -142,13 +140,14 @@ public class AuthManager : MonoBehaviour
                     }
                     else
                     {
-                        Debug.Log("✅ SaveUserToDatabase succeeded.");
+                        Debug.Log("✅ User saved as JSON.");
                         ShowMessage("✅ Registration successful!");
                     }
                 });
             });
         });
     }
+
 
     public void Login()
     {
@@ -181,18 +180,29 @@ public class AuthManager : MonoBehaviour
 
     private void LoadUsername(string userId)
     {
-        dbRef.Child("users").Child(userId).Child("username").GetValueAsync().ContinueWith(task =>
+        dbRef.Child("users").Child(userId).GetValueAsync().ContinueWith(task =>
         {
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
                 if (task.IsCompleted && task.Result.Exists)
                 {
-                    Debug.Log("✅ Username: " + task.Result.Value.ToString());
+                    // Take the snapshot and convert it to JSON
+                    string json = task.Result.GetRawJsonValue();
+
+                    // Deserialize the JSON into your UserCredentials class
+                    UserCredentials user = JsonUtility.FromJson<UserCredentials>(json);
+
+                    Debug.Log("✅ Username loaded from Firebase: " + user.username);
+
+                    // Optional: Store for UI or other usage
+                    // e.g., usernameText.text = user.username;
+
                     SwitchToHomePage();
                 }
                 else
                 {
-                    ShowMessage("Login succeeded, but no username found.");
+                    ShowMessage("Login succeeded, but user data not found.");
+                    Debug.LogWarning("⚠️ User node not found in database.");
                 }
             });
         });
