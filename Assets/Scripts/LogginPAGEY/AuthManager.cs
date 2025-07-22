@@ -34,7 +34,6 @@ public class AuthManager : MonoBehaviour
     public TMP_InputField usernameInput;
     public TMP_InputField emailInput;
     public TMP_InputField passwordInput;
-
     [Header("UI Elements")]
     public TMP_Text messageText;
     public GameObject loginCanvas;
@@ -44,6 +43,7 @@ public class AuthManager : MonoBehaviour
 
     void Awake()
     {
+
         if (Instance == null)
         {
             Instance = this;
