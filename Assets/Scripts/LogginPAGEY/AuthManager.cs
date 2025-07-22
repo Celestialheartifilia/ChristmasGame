@@ -17,6 +17,7 @@ public class UserCredentials
     public string email;
     public string password;
 
+
     public UserCredentials(string username, string email, string password)
     {
         this.username = username;
@@ -29,6 +30,7 @@ public class AuthManager : MonoBehaviour
 {
     public static AuthManager Instance;
     public static string currentUserId;
+    public static string currentUsername; // globally accessible across scenes
 
     [Header("Input Fields")]
     public TMP_InputField usernameInput;
@@ -194,9 +196,10 @@ public class AuthManager : MonoBehaviour
 
                     Debug.Log("✅ Username loaded from Firebase: " + user.username);
 
-                    // Optional: Store for UI or other usage
-                    // e.g., usernameText.text = user.username;
+                    // Store for use in next scene
+                    currentUsername = user.username;
 
+                    // Switch scene
                     SwitchToHomePage();
                 }
                 else
@@ -207,6 +210,7 @@ public class AuthManager : MonoBehaviour
             });
         });
     }
+
 
     public void OnForgotPasswordButtonPressed() => ForgotPassword(emailInput.text);
 
