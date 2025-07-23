@@ -153,6 +153,7 @@ public class AuthManager : MonoBehaviour
 
     public void Login()
     {
+        Debug.Log("UnityMainThreadDispatcher instance: " + UnityMainThreadDispatcher.Instance());
         string email = emailInput.text.Trim();
         string password = passwordInput.text;
 
@@ -183,34 +184,33 @@ public class AuthManager : MonoBehaviour
 
     private void LoadUsername(string userId)
     {
+        Debug.Log("UnityMainThreadDispatcher instance: " + UnityMainThreadDispatcher.Instance());
+        Debug.Log($"Loading username for userId: {userId}");
         dbRef.Child("users").Child(userId).GetValueAsync().ContinueWith(task =>
         {
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
                 if (task.IsCompleted && task.Result.Exists)
                 {
-                    // Take the snapshot and convert it to JSON
                     string json = task.Result.GetRawJsonValue();
+                    Debug.Log("User JSON: " + json);
 
-                    // Deserialize the JSON into your UserCredentials class
                     UserCredentials user = JsonUtility.FromJson<UserCredentials>(json);
-
-                    Debug.Log("✅ Username loaded from Firebase: " + user.username);
-
-                    // Store for use in next scene
                     currentUsername = user.username;
+                    Debug.Log("Loaded username: " + currentUsername);
 
-                    // Switch scene
+                    Debug.Log("Loading HomePage scene now...");
                     SceneManager.LoadScene("HomePage");
                 }
                 else
                 {
                     ShowMessage("Login succeeded, but user data not found.");
-                    Debug.LogWarning("⚠️ User node not found in database.");
+                    Debug.LogWarning("User data not found or task incomplete.");
                 }
             });
         });
     }
+
 
 
     public void OnForgotPasswordButtonPressed() => ForgotPassword(emailInput.text);
