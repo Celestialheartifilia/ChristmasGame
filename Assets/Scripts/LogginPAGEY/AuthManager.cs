@@ -175,6 +175,7 @@ public class AuthManager : MonoBehaviour
 
                 FirebaseUser user = task.Result.User;
                 currentUserId = user.UserId;
+                Debug.Log("🎉 Firebase login successful! UID: " + currentUserId);
                 LoadUsername(currentUserId);
             });
         });
@@ -200,7 +201,7 @@ public class AuthManager : MonoBehaviour
                     currentUsername = user.username;
 
                     // Switch scene
-                    SwitchToHomePage();
+                    SceneManager.LoadScene("HomePage");
                 }
                 else
                 {
@@ -265,8 +266,5 @@ public class AuthManager : MonoBehaviour
         ShowMessage("Signed out successfully.");
     }
 
-    private void SwitchToHomePage()
-    {
-        SceneManager.LoadScene("HomePage");
-    }
+
 }
